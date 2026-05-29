@@ -78,7 +78,7 @@
   function defaults() {
     return {
       done: {}, attempts: [], wrong: [], recall: {}, mastery: {}, writingScores: [], imported: [],
-      settings: { wordCount: 3, phraseCount: 2, questionCount: 2, writingCount: 1 },
+      settings: { wordCount: 3, phraseCount: 2, questionCount: 2, writingCount: 1, targetScore: 60, dailyMinutes: 35, examDate: "2026-10-31" },
       review: [reviewItem("benefit", "\u597d\u5904\uff1b\u4f7f\u53d7\u76ca", "word"), reviewItem("as a result", "\u7ed3\u679c\uff1b\u56e0\u6b64", "phrase")]
     };
   }
@@ -104,6 +104,10 @@
   }
   function renderToday() {
     const state = load(), s = state.settings;
+    const prediction = passPrediction(state);
+    const streak = streakStats(state);
+    const phase = studyPhase(prediction.scoreMid, s.examDate);
+    const paperTask = smartExamTask(state, prediction.weaknesses);
     const dueReview = state.review.filter((x) => x.due <= todayKey()).length;
     const dueWrong = state.review.filter((x) => x.kind === "question" && x.due <= todayKey()).length;
     const base = [
@@ -116,12 +120,67 @@
     const allDone = base.every(([id]) => state.done[`${todayKey()}:${id}`]);
     const tasks = allDone ? base.concat([["extra", "\u8ffd\u52a0\u7ec3\u4e60", "\u57fa\u7840\u4efb\u52a1\u5b8c\u6210\u540e\u81ea\u52a8\u89e3\u9501", "practice"]]) : base;
     const pct = Math.round(tasks.filter(([id]) => state.done[`${todayKey()}:${id}`]).length / tasks.length * 100);
-    shell(`<section class="hero-band"><div><p class="eyebrow">\u76ee\u6807 2026\u5e7410\u6708</p><h2>13000 \u82f1\u8bed\u5907\u8003</h2><p>\u6bcf\u65e5\u6570\u91cf\u53ef\u5728\u8bbe\u7f6e\u91cc\u8c03\u6574\uff0c\u4e0d\u8bbe\u7f6e\u5c31\u7528\u9ed8\u8ba4\u503c\u3002</p></div><div class="score-ring">${pct}%</div></section><section class="panel"><div class="section-title"><h3>\u4eca\u65e5\u5fc5\u505a</h3><span>${allDone ? "\u5df2\u89e3\u9501\u8ffd\u52a0" : "\u6309\u4f60\u7684\u8bbe\u7f6e"}</span></div>${tasks.map(([id, title, detail, target]) => taskRow(state, id, title, detail, target)).join("")}</section>`);
-    document.querySelectorAll("[data-complete]").forEach((b) => b.addEventListener("click", () => { const x = load(); x.done[`${todayKey()}:${b.dataset.complete}`] = true; save(x); renderToday(); }));
+    shell(`<section class="hero-band"><div><p class="eyebrow">\u76ee\u6807 ${s.targetScore} \u5206 · ${s.examDate}</p><h2>13000 \u82f1\u8bed\u8fc7\u7ebf\u7cfb\u7edf</h2><p>\u4eca\u65e5\u5b8c\u6210 ${pct}%\uff0c\u8ddf\u7740\u6e05\u5355\u505a\uff0c\u9519\u9898\u4f1a\u81ea\u52a8\u56de\u6765\u3002</p></div><div class="score-ring">${pct}%</div></section>${predictionCard(prediction, s)}${streakCard(streak)}${phaseCard(phase)}${examTaskCard(paperTask, s)}<section class="panel"><div class="section-title"><h3>\u4eca\u65e5\u5fc5\u505a</h3><span>${allDone ? "\u5df2\u89e3\u9501\u8ffd\u52a0" : "\u6309\u4f60\u7684\u8bbe\u7f6e"}</span></div>${tasks.map(([id, title, detail, target]) => taskRow(state, id, title, detail, target)).join("")}</section>`);
+    document.querySelectorAll("[data-complete]").forEach((b) => b.addEventListener("click", () => { const x = load(); x.done[`${todayKey()}:${b.dataset.complete}`] = true; save(x); b.classList.add("pop"); renderToday(); }));
   }
   function taskRow(state, id, title, detail, target) {
     const done = state.done[`${todayKey()}:${id}`];
     return `<article class="task-row"><button class="check ${done ? "done" : ""}" data-complete="${id}">${done ? "✓" : ""}</button><div><strong>${title}</strong><p>${detail}</p></div><button class="icon-button" data-route="${target}">›</button></article>`;
+  }
+  function passPrediction(state) {
+    const attempts = state.attempts.filter((x) => !String(x.id).startsWith("exam-"));
+    const right = attempts.filter((x) => x.correct).length;
+    const readingAcc = attempts.length ? right / attempts.length : 0.45;
+    const remembered = Object.values(state.mastery || {}).filter((x) => x.level >= 3).length + Object.values(state.recall || {}).filter((x) => x.ok).length;
+    const wordRate = Math.min(1, remembered / Math.max(words.length + phrases.length, 1));
+    const writingAvg = state.writingScores.length ? avg(state.writingScores.slice(-5).map((x) => x.score)) : 6;
+    const examDone = state.attempts.filter((x) => String(x.id).startsWith("exam-")).length;
+    const scoreMid = clamp(Math.round(36 + readingAcc * 12 + wordRate * 8 + writingAvg / 15 * 10 + Math.min(examDone, 4) * 2), 30, 78);
+    const probability = clamp(Math.round(18 + readingAcc * 28 + wordRate * 22 + writingAvg / 15 * 22 + Math.min(examDone, 5) * 2), 5, 96);
+    const weaknesses = [];
+    if (readingAcc < 0.65) weaknesses.push("\u9605\u8bfb");
+    if (wordRate < 0.55) weaknesses.push("\u5355\u8bcd");
+    if (writingAvg < 9) weaknesses.push("\u5199\u4f5c");
+    if (examDone < 1) weaknesses.push("\u771f\u9898");
+    return { scoreMid, range: `${Math.max(0, scoreMid - 3)}~${scoreMid + 3}`, probability, weaknesses: weaknesses.slice(0, 3), readingAcc, wordRate, writingAvg, examDone };
+  }
+  function predictionCard(p, settings) {
+    return `<section class="panel pass-panel"><div class="section-title"><h3>\u8fc7\u7ebf\u9884\u6d4b</h3><span>\u672c\u5730\u8bca\u65ad</span></div><div class="metric-grid"><div><strong>${p.range}</strong><span>\u5f53\u524d\u9884\u4f30</span></div><div><strong>${settings.targetScore}</strong><span>\u76ee\u6807</span></div><div><strong>${p.probability}%</strong><span>\u8fc7\u7ebf\u6982\u7387</span></div></div><p class="hint">\u8584\u5f31\u9879\uff1a${p.weaknesses.length ? p.weaknesses.join(" / ") : "\u6682\u65e0\u660e\u663e\u77ed\u677f\uff0c\u4fdd\u6301\u771f\u9898\u8bad\u7ec3"}</p></section>`;
+  }
+  function streakStats(state) {
+    const dates = [...new Set(Object.keys(state.done || {}).map((x) => x.split(":")[0]))].sort();
+    let streak = 0, d = parseLocalDate(todayKey());
+    while (dates.includes(toIsoDate(d))) { streak += 1; d.setDate(d.getDate() - 1); }
+    const today = parseLocalDate(todayKey()), weekStart = new Date(today); weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+    const weekDays = dates.filter((x) => parseLocalDate(x) >= weekStart && parseLocalDate(x) <= today).length;
+    const monthDays = dates.filter((x) => x.slice(0, 7) === todayKey().slice(0, 7)).length;
+    return { streak, weekRate: Math.round(weekDays / 7 * 100), monthMinutes: monthDays * (load().settings.dailyMinutes || 35), dates };
+  }
+  function streakCard(s) {
+    return `<section class="summary-grid"><div><strong>🔥 ${s.streak} \u5929</strong><span>\u8fde\u7eed\u5b66\u4e60</span></div><div><strong>${s.weekRate}%</strong><span>\u672c\u5468\u5b8c\u6210\u7387</span></div><div><strong>${s.monthMinutes} \u5206\u949f</strong><span>\u672c\u6708\u7d2f\u8ba1</span></div></section>`;
+  }
+  function studyPhase(score, examDate) {
+    const daysLeft = Math.ceil((parseLocalDate(examDate || "2026-10-31") - parseLocalDate(todayKey())) / 86400000);
+    if (daysLeft <= 35 || score >= 56) return { name: "\u7b2c\u4e09\u9636\u6bb5\uff1a\u51b2\u523a", progress: clamp(Math.round((60 - Math.max(daysLeft, 0)) / 60 * 100), 20, 95), focus: "\u5957\u5377\u6a21\u62df / \u9ad8\u9891\u9519\u9898 / \u4f5c\u6587\u9884\u6d4b" };
+    if (score >= 48) return { name: "\u7b2c\u4e8c\u9636\u6bb5\uff1a\u5f3a\u5316", progress: clamp(Math.round((score - 42) / 18 * 100), 25, 88), focus: "\u9605\u8bfb\u6b63\u786e\u7387 / \u771f\u9898\u8bad\u7ec3 / \u5199\u4f5c\u6a21\u677f" };
+    return { name: "\u7b2c\u4e00\u9636\u6bb5\uff1a\u57fa\u7840", progress: clamp(Math.round(score / 60 * 100), 10, 70), focus: "\u9ad8\u9891\u8bcd / \u57fa\u7840\u9605\u8bfb / \u7b80\u5355\u53e5\u578b" };
+  }
+  function phaseCard(phase) {
+    return `<section class="panel"><div class="section-title"><h3>${phase.name}</h3><span>${phase.progress}%</span></div><div class="progress-bar"><span style="width:${phase.progress}%"></span></div><p class="hint">\u5f53\u524d\u91cd\u70b9\uff1a${phase.focus}</p></section>`;
+  }
+  function smartExamTask(state, weaknesses) {
+    const bank = [
+      { title: "2019 \u9605\u8bfb A", type: "\u9605\u8bfb", minutes: 12 },
+      { title: "2021 \u5b8c\u578b", type: "\u5355\u8bcd", minutes: 10 },
+      { title: "2023 \u65b0\u9898\u578b", type: "\u9605\u8bfb", minutes: 8 },
+      { title: "2022 \u4f5c\u6587\u53e5\u578b", type: "\u5199\u4f5c", minutes: 8 }
+    ];
+    const preferred = bank.filter((x) => weaknesses.includes(x.type));
+    const tasks = (preferred.length ? preferred : bank).slice(0, 3);
+    return { tasks, minutes: tasks.reduce((n, x) => n + x.minutes, 0) };
+  }
+  function examTaskCard(task, settings) {
+    return `<section class="panel"><div class="section-title"><h3>\u4eca\u65e5\u771f\u9898\u4efb\u52a1</h3><span>\u9884\u8ba1 ${Math.min(task.minutes, settings.dailyMinutes || task.minutes)} \u5206\u949f</span></div><div class="tag-group">${task.tasks.map((x) => `<button data-route="exams">${x.title}</button>`).join("")}</div><p class="hint">\u6309\u8584\u5f31\u9879\u81ea\u52a8\u6392\uff0c\u505a\u5b8c\u540e\u628a\u9519\u9898\u56de\u6536\u5230\u590d\u4e60\u3002</p></section>`;
   }
   function renderPractice() {
     const list = todayList();
@@ -160,7 +219,7 @@
   function markMastery(btn) {
     const level = Number(btn.dataset.level);
     const s = load();
-    const days = level === 3 ? 4 : level === 2 ? 2 : 1;
+    const days = level === 3 ? 7 : level === 2 ? 3 : 1;
     const due = addDays(days);
     const item = reviewItem(btn.dataset.text, btn.dataset.cn, btn.dataset.kind, { due, interval: days });
     const old = s.review.find((r) => r.id === item.id);
@@ -199,18 +258,26 @@
     const item = questions.find((x) => x.id === id), selected = document.querySelector(`input[name="${id}"]:checked`);
     if (!selected) return;
     const correct = selected.value === item.answer, s = load();
-    s.attempts.push({ id, selected: selected.value, correct, at: new Date().toISOString() });
+    const wrongReason = correct ? "" : wrongReasonFor(item, selected.value);
+    s.attempts.push({ id, selected: selected.value, correct, wrongReason, at: new Date().toISOString() });
     if (!correct) {
       if (!s.wrong.includes(id)) s.wrong.push(id);
-      scheduleWrongQuestion(s, item);
+      scheduleWrongQuestion(s, item, wrongReason);
     }
     save(s);
     const box = document.querySelector(`#explain-${id}`);
     box.hidden = false;
-    box.innerHTML = `<div class="result ${correct ? "ok" : "bad"}">${correct ? "\u7b54\u5bf9\u4e86" : `\u4f60\u9009\u4e86 ${selected.value}\uff0c\u6b63\u786e\u7b54\u6848\u662f ${item.answer}`}</div><h4>\u4e3a\u4ec0\u4e48\u9009 ${item.answer}</h4><p>${item.explain.why}</p><h4>\u539f\u6587\u5b9a\u4f4d</h4><blockquote>${item.explain.source}</blockquote><p>${item.explain.sourceCn}</p>`;
+    box.innerHTML = `<div class="result ${correct ? "ok" : "bad"}">${correct ? "\u7b54\u5bf9\u4e86" : `\u4f60\u9009\u4e86 ${selected.value}\uff0c\u6b63\u786e\u7b54\u6848\u662f ${item.answer}`}</div>${correct ? "" : `<p><strong>\u9519\u56e0\u6807\u7b7e\uff1a</strong>${wrongReason}</p>`}<h4>\u4e3a\u4ec0\u4e48\u9009 ${item.answer}</h4><p>${item.explain.why}</p><h4>\u539f\u6587\u5b9a\u4f4d</h4><blockquote>${item.explain.source}</blockquote><p>${item.explain.sourceCn}</p>`;
   }
-  function scheduleWrongQuestion(state, item) {
-    const review = reviewItem(item.prompt, item.explain.why, "question", { id: `review-question-${item.id}`, qid: item.id, due: addDays(1), interval: 1 });
+  function wrongReasonFor(item, selected) {
+    if (item.title.includes("\u4e3b\u65e8")) return "\u4e3b\u65e8\u8bef\u5224";
+    if (item.title.includes("\u7ec6\u8282")) return "\u5b9a\u4f4d\u9519\u8bef";
+    if (item.title.includes("\u8bed\u6cd5")) return "\u957f\u96be\u53e5\u6ca1\u61c2";
+    if (item.title.includes("\u8bcd\u6c47") || item.title.includes("\u7ffb\u8bd1")) return "\u5355\u8bcd\u4e0d\u8ba4\u8bc6";
+    return selected > item.answer ? "\u63a8\u7406\u9519\u8bef" : "\u5b9a\u4f4d\u9519\u8bef";
+  }
+  function scheduleWrongQuestion(state, item, reason) {
+    const review = reviewItem(item.prompt, `${reason}\uff1a${item.explain.why}`, "question", { id: `review-question-${item.id}`, qid: item.id, reason, due: addDays(1), interval: 1 });
     const old = state.review.find((x) => x.id === review.id);
     if (old) Object.assign(old, review); else state.review.push(review);
   }
@@ -223,10 +290,24 @@
     let score = 4 + used * 2 + (sentenceUsed ? 3 : 0) + (wordCount >= 25 ? 2 : wordCount >= 12 ? 1 : 0);
     score = Math.max(0, Math.min(15, score));
     const why = [`\u4f7f\u7528\u4eca\u65e5\u8bcd\u77ed\u8bed ${used}/${required.length}\uff1a${used ? "\u6709\u52a0\u5206" : "\u9700\u8981\u52a0\u5165\u4eca\u65e5\u8bcd"}`, sentenceUsed ? "\u7528\u5230\u4fdd\u5e95\u53e5\u578b\uff1a+3" : "\u672a\u660e\u663e\u7528\u5230\u4fdd\u5e95\u53e5\u578b", wordCount >= 25 ? "\u5b57\u6570\u57fa\u672c\u591f" : "\u5b57\u6570\u504f\u5c11\uff0c\u5efa\u8bae\u5199 3-5 \u53e5"];
+    const ai = writingCoach(text, required);
     const box = document.querySelector("#writing-result");
     box.hidden = false;
-    box.innerHTML = `<div class="result ${score >= 9 ? "ok" : "bad"}">\u9884\u4f30 ${score}/15 \u5206</div>${why.map((x) => `<p>${x}</p>`).join("")}<p>\u8bf4\u660e\uff1a\u8fd9\u662f\u7ec3\u4e60\u7528\u4f30\u5206\uff0c\u4e0d\u4ee3\u8868\u771f\u5b9e\u9605\u5377\u5206\u3002</p>`;
+    box.innerHTML = `<div class="result ${score >= 9 ? "ok" : "bad"}">\u9884\u4f30 ${score}/15 \u5206</div>${why.map((x) => `<p>${x}</p>`).join("")}<h4>AI\u70b9\u8bc4</h4>${ai.comments.map((x) => `<p>${x}</p>`).join("")}<h4>AI\u6539\u5199</h4><p class="english">${ai.rewrite}</p><h4>\u9ad8\u7ea7\u8868\u8fbe\u66ff\u6362</h4><div class="tag-group">${ai.replacements.map((x) => `<button>${x}</button>`).join("")}</div><p>\u8bf4\u660e\uff1a\u8fd9\u662f\u672c\u5730\u7ec3\u4e60\u7528\u8bca\u65ad\uff0c\u4e0d\u4ee3\u8868\u771f\u5b9e\u9605\u5377\u5206\u3002</p>`;
     const s = load(); s.writingScores.push({ text, score, why, at: new Date().toISOString() }); save(s);
+  }
+  function writingCoach(text, required) {
+    const low = norm(text);
+    const comments = [];
+    if ((text.match(/\b(and|but|so)\b/gi) || []).length < 2) comments.push("\u8fde\u63a5\u8bcd\u504f\u5c11\uff1a\u52a0\u5165 however / as a result / besides\u3002");
+    if (!/because|because of|as a result|therefore/i.test(text)) comments.push("\u539f\u56e0\u548c\u7ed3\u679c\u4e0d\u591f\u660e\u786e\uff1a\u5199\u4f5c\u91cc\u5c3d\u91cf\u6709\u4e00\u53e5\u56e0\u679c\u53e5\u3002");
+    if (/i think/i.test(text)) comments.push("\u53e5\u578b\u53ef\u4ee5\u66f4\u9ad8\u7ea7\uff1aI think \u2192 It is widely believed that\u3002");
+    if (/good/i.test(text)) comments.push("\u7528\u8bcd\u53ef\u5347\u7ea7\uff1agood \u2192 beneficial / advantageous\u3002");
+    if (required.filter((x) => low.includes(norm(x))).length < 2) comments.push("\u4eca\u65e5\u8bcd\u77ed\u8bed\u7528\u5f97\u5c11\uff0c\u5efa\u8bae\u81f3\u5c11\u653e 2 \u4e2a\u8fdb\u4f5c\u6587\u3002");
+    if (!comments.length) comments.push("\u8868\u8fbe\u57fa\u672c\u6e05\u695a\uff0c\u4e0b\u4e00\u6b65\u662f\u591a\u7528\u4ece\u53e5\u548c\u8fde\u63a5\u8bcd\u62c9\u5f00\u5206\u5dee\u3002");
+    const topic = text.split(/[.!?。！？]/).find(Boolean)?.trim() || "Building a good habit is important for us";
+    const rewrite = `It is widely believed that ${topic.charAt(0).toLowerCase() + topic.slice(1)}. Besides, regular practice can bring us many benefits. As a result, we are more likely to improve our English step by step.`;
+    return { comments, rewrite, replacements: ["I think \u2192 It is widely believed that", "good \u2192 beneficial", "important \u2192 essential", "help \u2192 enable", "so \u2192 as a result"] };
   }
   function renderReview() {
     const s = load(), items = s.review.filter((x) => x.due <= todayKey());
@@ -239,12 +320,20 @@
     return `<article class="review-row"><div><p class="eyebrow">${kind}</p><h3>${x.text}</h3><p>${x.cn}</p><small>\u4e0b\u6b21\uff1a${x.due}</small></div><div class="rating-row">${action}<button data-rate="${x.id}" data-rating="1">\u4e0d\u4f1a</button><button data-rate="${x.id}" data-rating="2">\u6a21\u7cca</button><button data-rate="${x.id}" data-rating="3">\u8ba4\u8bc6</button></div></article>`;
   }
   function rate(id, level) {
-    const s = load(), item = s.review.find((x) => x.id === id), days = level === 3 ? Math.max(item.interval * 2, 3) : level === 2 ? 2 : 1, d = new Date();
+    const s = load(), item = s.review.find((x) => x.id === id), days = level === 3 ? Math.max(item.interval * 2, 7) : level === 2 ? 3 : 1, d = new Date();
     d.setDate(d.getDate() + days); item.interval = days; item.due = d.toISOString().slice(0, 10); save(s); renderReview();
   }
   function renderWrong() {
     const s = load(), items = s.wrong.map((id) => questions.find((x) => x.id === id)).filter(Boolean);
-    shell(`<section class="panel"><div class="section-title"><h3>\u9519\u9898\u672c</h3><span>${items.length} \u9898</span></div>${items.length ? items.map((x) => `<article class="study-card"><h3>${x.prompt}</h3><p>${x.explain.why}</p><blockquote>${x.explain.source}</blockquote><p>${x.explain.sourceCn}</p></article>`).join("") : `<p class="empty">\u8fd8\u6ca1\u6709\u9519\u9898\u3002</p>`}</section>`);
+    const reasons = wrongReasonStats(s);
+    shell(`<section class="panel"><div class="section-title"><h3>\u9519\u56e0\u7edf\u8ba1</h3><span>${Object.values(reasons).reduce((a, b) => a + b, 0)} \u6b21</span></div><div class="tag-group">${Object.entries(reasons).map(([k, v]) => `<button>${k} ${v}</button>`).join("") || "<p class=\"empty\">\u6682\u65e0\u9519\u56e0\u3002</p>"}</div></section><section class="panel"><div class="section-title"><h3>\u9519\u9898\u672c</h3><span>${items.length} \u9898</span></div>${items.length ? items.map((x) => wrongCard(x, s)).join("") : `<p class="empty">\u8fd8\u6ca1\u6709\u9519\u9898\u3002</p>`}</section>`);
+  }
+  function wrongReasonStats(state) {
+    return state.attempts.filter((x) => x.wrongReason).reduce((bag, x) => { bag[x.wrongReason] = (bag[x.wrongReason] || 0) + 1; return bag; }, {});
+  }
+  function wrongCard(item, state) {
+    const last = [...state.attempts].reverse().find((x) => x.id === item.id && x.wrongReason);
+    return `<article class="study-card"><p class="eyebrow">${last?.wrongReason || "\u5f85\u590d\u76d8"}</p><h3>${item.prompt}</h3><p>${item.explain.why}</p><blockquote>${item.explain.source}</blockquote><p>${item.explain.sourceCn}</p></article>`;
   }
   function renderExams() {
     const exams = window.AUTHORIZED_EXAMS || [];
@@ -306,19 +395,30 @@
     box.innerHTML = `<div class="result ${correct / total >= 0.6 ? "ok" : "bad"}">41-50：${correct}/${total}</div>${wrong.length ? `<p>${wrong.join("；")}</p>` : "<p>全部正确。</p>"}`;
   }
   function renderProgress() {
-    const s = load(), correct = s.attempts.filter((x) => x.correct).length, acc = s.attempts.length ? Math.round(correct / s.attempts.length * 100) : 0, recallOk = Object.values(s.recall).filter((x) => x.ok).length, lastScore = s.writingScores.at(-1)?.score ?? "-";
-    shell(`<section class="hero-band"><div><p class="eyebrow">\u5b66\u4e60\u8fdb\u5ea6</p><h2>\u4eca\u65e5\u638c\u63e1\u60c5\u51b5</h2><p>\u7edf\u8ba1\u7b54\u9898\u3001\u8f93\u5165\u56de\u5fc6\u548c\u5199\u4f5c\u4f30\u5206\u3002</p></div><div class="score-ring">${acc}%</div></section><section class="summary-grid"><div><strong>${s.attempts.length}</strong><span>\u7b54\u9898</span></div><div><strong>${recallOk}</strong><span>\u5df2\u8bb0\u4f4f</span></div><div><strong>${lastScore}</strong><span>\u4e0a\u6b21\u5199\u4f5c</span></div></section>`);
+    const s = load(), correct = s.attempts.filter((x) => x.correct).length, acc = s.attempts.length ? Math.round(correct / s.attempts.length * 100) : 0, recallOk = Object.values(s.recall).filter((x) => x.ok).length;
+    const writingAvg = s.writingScores.length ? avg(s.writingScores.map((x) => x.score)).toFixed(1) : "-";
+    const pred = passPrediction(s), diagnosis = weeklyDiagnosis(s, pred);
+    shell(`<section class="hero-band"><div><p class="eyebrow">\u5b66\u4e60\u8fdb\u5ea6</p><h2>\u8fc7\u7ebf\u95ed\u73af\u770b\u677f</h2><p>\u770b\u8d8b\u52bf\u3001\u9519\u56e0\u548c\u672c\u5468\u8bca\u65ad\uff0c\u4e0d\u7528\u81ea\u5df1\u731c\u95ee\u9898\u5728\u54ea\u3002</p></div><div class="score-ring">${acc}%</div></section><section class="summary-grid"><div><strong>${acc}%</strong><span>\u9605\u8bfb\u6b63\u786e\u7387</span></div><div><strong>${recallOk}</strong><span>\u5355\u8bcd\u8bb0\u5fc6</span></div><div><strong>${writingAvg}</strong><span>\u5199\u4f5c\u5e73\u5747\u5206</span></div></section><section class="panel"><div class="section-title"><h3>\u6700\u8fd1 7 \u5929</h3><span>\u5b66\u4e60\u70ed\u529b</span></div><div class="heatmap">${lastNDays(7).map((d) => `<span class="${Object.keys(s.done).some((k) => k.startsWith(d)) ? "hot" : ""}">${d.slice(5)}</span>`).join("")}</div></section><section class="panel"><div class="section-title"><h3>AI \u5b66\u4e60\u8bca\u65ad</h3><span>\u6bcf\u5468\u770b\u4e00\u6b21</span></div>${diagnosis.map((x) => `<p>${x}</p>`).join("")}</section>`);
+  }
+  function weeklyDiagnosis(state, pred) {
+    const lines = [];
+    if (pred.readingAcc < 0.65) lines.push("\u672c\u5468\u95ee\u9898\uff1a\u9605\u8bfb\u5b9a\u4f4d\u80fd\u529b\u504f\u5f31\uff0c\u505a\u9898\u65f6\u5148\u5708\u9898\u5e72\u5173\u952e\u8bcd\u3002");
+    if (pred.wordRate < 0.55) lines.push("\u672c\u5468\u95ee\u9898\uff1a\u5355\u8bcd\u8bb0\u5fc6\u4e0d\u7a33\uff0c\u4f18\u5148\u590d\u4e60\u201c\u4e0d\u719f/\u6a21\u7cca\u201d\u3002");
+    if (pred.writingAvg < 9) lines.push("\u672c\u5468\u95ee\u9898\uff1a\u4f5c\u6587\u53e5\u578b\u91cd\u590d\uff0c\u6bcf\u5929\u9ed8\u5199 1 \u53e5\u9ad8\u9891\u53e5\u578b\u3002");
+    if (!lines.length) lines.push("\u672c\u5468\u72b6\u6001\u4e0d\u9519\uff1a\u4e0b\u4e00\u6b65\u628a\u771f\u9898\u7ec3\u4e60\u6bd4\u4f8b\u63d0\u9ad8\u5230\u6bcf\u5468 2 \u6b21\u3002");
+    lines.push(`\u5efa\u8bae\uff1a\u672c\u5468\u4e3b\u653b ${pred.weaknesses.join(" / ") || "\u771f\u9898\u5957\u5377"}\u3002`);
+    return lines;
   }
   function renderPlan() {
     const plan = buildStudyPlan();
     const next = plan.days.slice(0, 14);
     const rest = plan.days.slice(14);
-    shell(`<section class="hero-band"><div><p class="eyebrow">\u4ece ${plan.startText} \u5230 2026-10-31</p><h2>\u6bcf\u65e5\u7ec3\u4e60\u8ba1\u5212</h2><p>\u6309\u4f60\u8bbe\u7f6e\u7684\u6bcf\u65e5\u6570\u91cf\u81ea\u52a8\u751f\u6210\uff0c\u7528\u6765\u4e00\u76f4\u7ec3\u5230 10 \u6708\u5e95\u3002</p></div><div class="score-ring">${plan.total}</div></section><section class="summary-grid"><div><strong>${plan.total}</strong><span>\u5269\u4f59\u5929\u6570</span></div><div><strong>${plan.weeklyExamCount}</strong><span>\u771f\u9898\u5468\u6d4b</span></div><div><strong>${plan.settingsText}</strong><span>\u6bcf\u65e5\u91cf</span></div></section><section class="panel"><div class="section-title"><h3>\u8fd1 14 \u5929</h3><span>\u5148\u7167\u8fd9\u4e2a\u505a</span></div><div class="plan-list">${next.map(planCard).join("")}</div></section>${rest.length ? `<section class="panel"><details><summary>\u67e5\u770b 10 \u6708\u5e95\u524d\u5168\u90e8\u8ba1\u5212\uff08${rest.length} \u5929\uff09</summary><div class="plan-list full-plan">${rest.map(planCard).join("")}</div></details></section>` : ""}`);
+    shell(`<section class="hero-band"><div><p class="eyebrow">\u4ece ${plan.startText} \u5230 ${plan.endText}</p><h2>\u6bcf\u65e5\u7ec3\u4e60\u8ba1\u5212</h2><p>\u6309\u4f60\u8bbe\u7f6e\u7684\u6bcf\u65e5\u6570\u91cf\u81ea\u52a8\u751f\u6210\uff0c\u7528\u6765\u4e00\u76f4\u7ec3\u5230\u8003\u8bd5\u524d\u3002</p></div><div class="score-ring">${plan.total}</div></section><section class="summary-grid"><div><strong>${plan.total}</strong><span>\u5269\u4f59\u5929\u6570</span></div><div><strong>${plan.weeklyExamCount}</strong><span>\u771f\u9898\u5468\u6d4b</span></div><div><strong>${plan.settingsText}</strong><span>\u6bcf\u65e5\u91cf</span></div></section><section class="panel"><div class="section-title"><h3>\u8fd1 14 \u5929</h3><span>\u5148\u7167\u8fd9\u4e2a\u505a</span></div><div class="plan-list">${next.map(planCard).join("")}</div></section>${rest.length ? `<section class="panel"><details><summary>\u67e5\u770b\u8003\u8bd5\u524d\u5168\u90e8\u8ba1\u5212\uff08${rest.length} \u5929\uff09</summary><div class="plan-list full-plan">${rest.map(planCard).join("")}</div></details></section>` : ""}`);
   }
   function buildStudyPlan() {
     const settings = load().settings;
     const start = parseLocalDate(todayKey());
-    const end = parseLocalDate("2026-10-31");
+    const end = parseLocalDate(settings.examDate || "2026-10-31");
     const days = [];
     let weeklyExamCount = 0;
     for (let d = new Date(start), index = 0; d <= end; d.setDate(d.getDate() + 1), index += 1) {
@@ -327,7 +427,7 @@
       if (weeklyExam) weeklyExamCount += 1;
       days.push({ iso, title: reviewDay ? "\u8f7b\u590d\u76d8\u65e5" : phase.title, phase: phase.name, tasks: planTasks(settings, phase, reviewDay, weeklyExam) });
     }
-    return { days, total: days.length, weeklyExamCount, startText: todayKey(), settingsText: `${settings.wordCount}/${settings.phraseCount}/${settings.questionCount}/${settings.writingCount}` };
+    return { days, total: days.length, weeklyExamCount, startText: todayKey(), endText: settings.examDate || "2026-10-31", settingsText: `${settings.wordCount}/${settings.phraseCount}/${settings.questionCount}/${settings.writingCount}` };
   }
   function planPhase(iso) {
     if (iso < "2026-07-01") return { name: "\u57fa\u7840\u6062\u590d", title: "\u8865\u57fa\u7840" };
@@ -357,14 +457,14 @@
   }
   function renderSettings() {
     const s = load();
-    shell(`<section class="panel"><div class="section-title"><h3>\u6bcf\u65e5\u6570\u91cf</h3><span>\u4e0d\u586b\u5c31\u7528\u9ed8\u8ba4</span></div>${num("wordCount", "\u5355\u8bcd", s.settings.wordCount)}${num("phraseCount", "\u77ed\u8bed", s.settings.phraseCount)}${num("questionCount", "\u9605\u8bfb\u9898", s.settings.questionCount)}${num("writingCount", "\u4f5c\u6587\u53e5\u578b", s.settings.writingCount)}<button class="primary" id="save-settings">\u4fdd\u5b58\u8bbe\u7f6e</button></section><section class="panel"><div class="section-title"><h3>\u771f\u9898\u6587\u672c\u5bfc\u5165</h3><span>\u9700\u8981\u4f60\u63d0\u4f9b\u8d44\u6599</span></div><p>\u53ef\u7c98\u8d34\u4f60\u5df2\u6709\u6743\u4f7f\u7528\u7684\u771f\u9898\u6587\u672c\uff0c\u7cfb\u7edf\u5148\u4fdd\u5b58\u5230\u672c\u5730\u3002\u6211\u4e0d\u4f1a\u64c5\u81ea\u5185\u7f6e\u672a\u6388\u6743\u771f\u9898\u3002</p><textarea class="writing-input" id="import-text" placeholder="\u7c98\u8d34\u9605\u8bfb\u77ed\u6587\u3001\u9898\u76ee\u3001\u7b54\u6848\u548c\u89e3\u6790"></textarea><button class="primary" id="save-import">\u4fdd\u5b58\u771f\u9898\u6587\u672c</button><p class="hint">\u5df2\u4fdd\u5b58 ${s.imported.length} \u6761</p></section>`);
+    shell(`<section class="panel"><div class="section-title"><h3>\u76ee\u6807\u7cfb\u7edf</h3><span>\u81ea\u52a8\u751f\u6210\u6bcf\u65e5\u8ba1\u5212</span></div>${num("targetScore", "\u76ee\u6807\u5206\u6570", s.settings.targetScore, 30, 100)}${num("dailyMinutes", "\u6bcf\u65e5\u5b66\u4e60\u5206\u949f", s.settings.dailyMinutes, 5, 180)}<label class="setting-row"><span>\u8003\u8bd5\u65e5\u671f</span><input type="date" data-setting="examDate" value="${s.settings.examDate || "2026-10-31"}" /></label></section><section class="panel"><div class="section-title"><h3>\u6bcf\u65e5\u6570\u91cf</h3><span>\u4e0d\u586b\u5c31\u7528\u9ed8\u8ba4</span></div>${num("wordCount", "\u5355\u8bcd", s.settings.wordCount)}${num("phraseCount", "\u77ed\u8bed", s.settings.phraseCount)}${num("questionCount", "\u9605\u8bfb\u9898", s.settings.questionCount)}${num("writingCount", "\u4f5c\u6587\u53e5\u578b", s.settings.writingCount)}<button class="primary" id="save-settings">\u4fdd\u5b58\u8bbe\u7f6e</button></section><section class="panel"><div class="section-title"><h3>\u771f\u9898\u6587\u672c\u5bfc\u5165</h3><span>\u9700\u8981\u4f60\u63d0\u4f9b\u8d44\u6599</span></div><p>\u53ef\u7c98\u8d34\u4f60\u5df2\u6709\u6743\u4f7f\u7528\u7684\u771f\u9898\u6587\u672c\uff0c\u7cfb\u7edf\u5148\u4fdd\u5b58\u5230\u672c\u5730\u3002\u6211\u4e0d\u4f1a\u64c5\u81ea\u5185\u7f6e\u672a\u6388\u6743\u771f\u9898\u3002</p><textarea class="writing-input" id="import-text" placeholder="\u7c98\u8d34\u9605\u8bfb\u77ed\u6587\u3001\u9898\u76ee\u3001\u7b54\u6848\u548c\u89e3\u6790"></textarea><button class="primary" id="save-import">\u4fdd\u5b58\u771f\u9898\u6587\u672c</button><p class="hint">\u5df2\u4fdd\u5b58 ${s.imported.length} \u6761</p></section>`);
     document.querySelector("#save-settings").addEventListener("click", saveSettings);
     document.querySelector("#save-import").addEventListener("click", saveImport);
   }
-  function num(key, label, value) { return `<label class="setting-row"><span>${label}</span><input type="number" min="0" max="20" data-setting="${key}" value="${value}" /></label>`; }
+  function num(key, label, value, min = 0, max = 20) { return `<label class="setting-row"><span>${label}</span><input type="number" min="${min}" max="${max}" data-setting="${key}" value="${value}" /></label>`; }
   function saveSettings() {
     const s = load();
-    document.querySelectorAll("[data-setting]").forEach((i) => { s.settings[i.dataset.setting] = Number(i.value || defaults().settings[i.dataset.setting]); });
+    document.querySelectorAll("[data-setting]").forEach((i) => { s.settings[i.dataset.setting] = i.type === "date" ? i.value : Number(i.value || defaults().settings[i.dataset.setting]); });
     save(s); renderSettings();
   }
   function saveImport() {
@@ -378,6 +478,19 @@
     const d = new Date();
     d.setDate(d.getDate() + days);
     return d.toISOString().slice(0, 10);
+  }
+  function lastNDays(n) {
+    return Array.from({ length: n }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (n - 1 - i));
+      return d.toISOString().slice(0, 10);
+    });
+  }
+  function avg(list) {
+    return list.length ? list.reduce((a, b) => a + Number(b || 0), 0) / list.length : 0;
+  }
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
   }
   function render() {
     const r = route();

@@ -142,13 +142,13 @@ p {
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 14px;
+  gap: 10px;
+  margin-bottom: 16px;
 }
 
 .summary-grid div,
 .settings-list div {
-  padding: 12px;
+  padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
@@ -194,7 +194,75 @@ p {
 }
 
 .panel {
-  padding: 14px;
+  padding: 16px;
+}
+
+.pass-panel {
+  border-color: rgba(20, 99, 86, 0.32);
+  background: #f9fffc;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.metric-grid div {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.metric-grid strong {
+  display: block;
+  color: var(--brand);
+  font-size: 22px;
+}
+
+.metric-grid span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.progress-bar {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--brand-soft);
+}
+
+.progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand);
+}
+
+.heatmap {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.heatmap span {
+  display: grid;
+  min-height: 42px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfaf6;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.heatmap span.hot {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand);
 }
 
 .section-title {
@@ -264,8 +332,8 @@ p {
 .study-card,
 .passage-card,
 .question-card {
-  margin-bottom: 12px;
-  padding: 14px;
+  margin-bottom: 16px;
+  padding: 16px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: white;
@@ -471,7 +539,11 @@ p {
 
 .primary {
   width: 100%;
-  margin-top: 10px;
+  min-height: 48px;
+  margin-top: 12px;
+  background: var(--brand);
+  box-shadow: 0 8px 18px rgba(20, 99, 86, 0.18);
+  font-size: 16px;
 }
 
 .danger {
@@ -524,6 +596,17 @@ summary {
   padding: 10px;
   border-radius: 8px;
   font-weight: 800;
+}
+
+.check.pop,
+.check.done {
+  animation: pop 180ms ease-out;
+}
+
+@keyframes pop {
+  0% { transform: scale(0.88); }
+  70% { transform: scale(1.08); }
+  100% { transform: scale(1); }
 }
 
 .result.ok {
@@ -600,6 +683,10 @@ blockquote {
   }
 
   .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-grid {
     grid-template-columns: 1fr;
   }
 
