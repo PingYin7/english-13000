@@ -197,6 +197,19 @@ p {
   padding: 16px;
 }
 
+.today-focus {
+  border-color: rgba(20, 99, 86, 0.24);
+}
+
+.finish-banner {
+  margin-bottom: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-weight: 800;
+}
+
 .pass-panel {
   border-color: rgba(20, 99, 86, 0.32);
   background: #f9fffc;
@@ -227,6 +240,29 @@ p {
   font-size: 12px;
 }
 
+.calm-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.calm-grid div {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfaf6;
+}
+
+.calm-grid strong,
+.calm-grid span {
+  display: block;
+}
+
+.calm-grid span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .progress-bar {
   height: 12px;
   overflow: hidden;
@@ -239,6 +275,38 @@ p {
   height: 100%;
   border-radius: inherit;
   background: var(--brand);
+}
+
+.step-shell {
+  margin-bottom: 10px;
+}
+
+.step-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.step-tabs button {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfaf6;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.step-tabs button.active {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: white;
+}
+
+.step-tabs button.done {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand);
 }
 
 .heatmap {
@@ -687,6 +755,10 @@ blockquote {
   }
 
   .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .calm-grid {
     grid-template-columns: 1fr;
   }
 

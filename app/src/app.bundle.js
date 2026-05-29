@@ -77,7 +77,7 @@
   }
   function defaults() {
     return {
-      done: {}, attempts: [], wrong: [], recall: {}, mastery: {}, writingScores: [], imported: [],
+      done: {}, attempts: [], wrong: [], recall: {}, mastery: {}, practiceStep: {}, writingScores: [], imported: [],
       settings: { wordCount: 3, phraseCount: 2, questionCount: 2, writingCount: 1, targetScore: 60, dailyMinutes: 35, examDate: "2026-10-31" },
       review: [reviewItem("benefit", "\u597d\u5904\uff1b\u4f7f\u53d7\u76ca", "word"), reviewItem("as a result", "\u7ed3\u679c\uff1b\u56e0\u6b64", "phrase")]
     };
@@ -107,20 +107,19 @@
     const prediction = passPrediction(state);
     const streak = streakStats(state);
     const phase = studyPhase(prediction.scoreMid, s.examDate);
-    const paperTask = smartExamTask(state, prediction.weaknesses);
     const dueReview = state.review.filter((x) => x.due <= todayKey()).length;
     const dueWrong = state.review.filter((x) => x.kind === "question" && x.due <= todayKey()).length;
     const base = [
-      ["review", "\u5148\u590d\u4e60", `\u4eca\u5929\u5230\u671f ${dueReview} \u9879\uff0c\u5176\u4e2d\u9519\u9898 ${dueWrong} \u9898`, "review"],
       ["words", "\u5355\u8bcd\u77ed\u8bed", `\u4eca\u5929 ${s.wordCount} \u4e2a\u5355\u8bcd\u3001${s.phraseCount} \u4e2a\u77ed\u8bed`, "practice"],
-      ["questions", "\u9605\u8bfb\u9898", `\u4eca\u5929 ${s.questionCount} \u9053\u9605\u8bfb\u9898`, "practice"],
       ["dictation", "\u53e5\u578b\u9ed8\u5199", "\u770b\u4e2d\u6587\u9ed8\u5199\u82f1\u6587\uff0c\u7cfb\u7edf\u68c0\u67e5\u5173\u952e\u8bcd", "practice"],
-      ["writing", "\u5199\u4f5c\u9898", "\u7528\u4eca\u5929\u7684\u8bcd\u548c\u53e5\u578b\u5199\u4e00\u6bb5", "practice"]
+      ["questions", "\u9605\u8bfb\u8bad\u7ec3", `\u4eca\u5929 ${s.questionCount} \u9053\uff0c\u9ed8\u8ba4\u6298\u53e0`, "practice"],
+      ["writing", "\u5199\u4f5c\u7ec3\u4e60", "\u5148\u7528\u4eca\u5929\u7684\u8bcd\u5199 1 \u53e5", "practice"],
+      ["review", "\u590d\u4e60\u56de\u6536", `\u5230\u671f ${dueReview} \u9879\uff0c\u5176\u4e2d\u9519\u9898 ${dueWrong} \u9898`, "review"]
     ];
     const allDone = base.every(([id]) => state.done[`${todayKey()}:${id}`]);
     const tasks = allDone ? base.concat([["extra", "\u8ffd\u52a0\u7ec3\u4e60", "\u57fa\u7840\u4efb\u52a1\u5b8c\u6210\u540e\u81ea\u52a8\u89e3\u9501", "practice"]]) : base;
-    const pct = Math.round(tasks.filter(([id]) => state.done[`${todayKey()}:${id}`]).length / tasks.length * 100);
-    shell(`<section class="hero-band"><div><p class="eyebrow">\u76ee\u6807 ${s.targetScore} \u5206 · ${s.examDate}</p><h2>13000 \u82f1\u8bed\u8fc7\u7ebf\u7cfb\u7edf</h2><p>\u4eca\u65e5\u5b8c\u6210 ${pct}%\uff0c\u8ddf\u7740\u6e05\u5355\u505a\uff0c\u9519\u9898\u4f1a\u81ea\u52a8\u56de\u6765\u3002</p></div><div class="score-ring">${pct}%</div></section>${predictionCard(prediction, s)}${streakCard(streak)}${phaseCard(phase)}${examTaskCard(paperTask, s)}<section class="panel"><div class="section-title"><h3>\u4eca\u65e5\u5fc5\u505a</h3><span>${allDone ? "\u5df2\u89e3\u9501\u8ffd\u52a0" : "\u6309\u4f60\u7684\u8bbe\u7f6e"}</span></div>${tasks.map(([id, title, detail, target]) => taskRow(state, id, title, detail, target)).join("")}</section>`);
+    const doneCount = tasks.filter(([id]) => state.done[`${todayKey()}:${id}`]).length;
+    shell(`<section class="panel today-focus"><div class="section-title"><h3>\u4eca\u65e5\u4efb\u52a1</h3><span>${doneCount}/${tasks.length}</span></div>${allDone ? `<div class="finish-banner">\u4eca\u65e5\u5df2\u901a\u5173\uff0c\u660e\u5929\u7ee7\u7eed\u3002</div>` : `<p class="hint">\u4e0d\u7528\u4e00\u6b21\u60f3\u592a\u591a\uff0c\u70b9\u5f00\u7ec3\u4e60\u9875\u6309\u6b65\u9aa4\u505a\u5c31\u884c\u3002</p>`}${tasks.map(([id, title, detail, target]) => taskRow(state, id, title, detail, target)).join("")}</section>${phaseLiteCard(phase, prediction, s)}${recentProgressCard(streak, prediction)}`);
     document.querySelectorAll("[data-complete]").forEach((b) => b.addEventListener("click", () => { const x = load(); x.done[`${todayKey()}:${b.dataset.complete}`] = true; save(x); b.classList.add("pop"); renderToday(); }));
   }
   function taskRow(state, id, title, detail, target) {
@@ -146,6 +145,13 @@
   }
   function predictionCard(p, settings) {
     return `<section class="panel pass-panel"><div class="section-title"><h3>\u8fc7\u7ebf\u9884\u6d4b</h3><span>\u672c\u5730\u8bca\u65ad</span></div><div class="metric-grid"><div><strong>${p.range}</strong><span>\u5f53\u524d\u9884\u4f30</span></div><div><strong>${settings.targetScore}</strong><span>\u76ee\u6807</span></div><div><strong>${p.probability}%</strong><span>\u8fc7\u7ebf\u6982\u7387</span></div></div><p class="hint">\u8584\u5f31\u9879\uff1a${p.weaknesses.length ? p.weaknesses.join(" / ") : "\u6682\u65e0\u660e\u663e\u77ed\u677f\uff0c\u4fdd\u6301\u771f\u9898\u8bad\u7ec3"}</p></section>`;
+  }
+  function phaseLiteCard(phase, prediction, settings) {
+    return `<section class="panel"><div class="section-title"><h3>\u5f53\u524d\u9636\u6bb5</h3><span>${phase.progress}%</span></div><p><strong>\u5f53\u524d\u72b6\u6001\uff1a</strong>${phase.name.replace(/^\u7b2c.\u9636\u6bb5\uff1a/, "")}</p><p><strong>\u9884\u8ba1\u5206\u6570\uff1a</strong>${prediction.range}</p><p><strong>\u76ee\u6807\u5206\u6570\uff1a</strong>${settings.targetScore}</p><div class="progress-bar"><span style="width:${phase.progress}%"></span></div><p class="hint">\u5efa\u8bae\uff1a\u5148\u8fde\u7eed\u5b8c\u6210 7 \u5929\uff0c\u7cfb\u7edf\u4f1a\u91cd\u65b0\u8bc4\u4f30\u3002</p></section>`;
+  }
+  function recentProgressCard(streak, prediction) {
+    const doneToday = Object.keys(load().done || {}).filter((x) => x.startsWith(todayKey())).length;
+    return `<section class="panel"><div class="section-title"><h3>\u6700\u8fd1\u8fdb\u6b65</h3><span>\u8f7b\u91cf\u8bb0\u5f55</span></div><div class="calm-grid"><div><strong>${streak.streak} \u5929</strong><span>\u8fde\u7eed\u5b66\u4e60</span></div><div><strong>${doneToday}</strong><span>\u4eca\u65e5\u5b8c\u6210</span></div><div><strong>${Math.round(prediction.readingAcc * 100)}%</strong><span>\u7ec3\u4e60\u6b63\u786e\u7387</span></div></div><p class="hint">\u7ec6\u8282\u7edf\u8ba1\u5df2\u653e\u5230\u8fdb\u5ea6\u9875\uff0c\u9996\u9875\u53ea\u770b\u4eca\u5929\u600e\u4e48\u505a\u3002</p></section>`;
   }
   function streakStats(state) {
     const dates = [...new Set(Object.keys(state.done || {}).map((x) => x.split(":")[0]))].sort();
@@ -183,9 +189,36 @@
     return `<section class="panel"><div class="section-title"><h3>\u4eca\u65e5\u771f\u9898\u4efb\u52a1</h3><span>\u9884\u8ba1 ${Math.min(task.minutes, settings.dailyMinutes || task.minutes)} \u5206\u949f</span></div><div class="tag-group">${task.tasks.map((x) => `<button data-route="exams">${x.title}</button>`).join("")}</div><p class="hint">\u6309\u8584\u5f31\u9879\u81ea\u52a8\u6392\uff0c\u505a\u5b8c\u540e\u628a\u9519\u9898\u56de\u6536\u5230\u590d\u4e60\u3002</p></section>`;
   }
   function renderPractice() {
-    const list = todayList();
-    shell(`<section class="panel"><div class="section-title"><h3>\u4eca\u65e5\u5355\u8bcd\u77ed\u8bed</h3><span>${list.words.length}+${list.phrases.length}</span></div>${list.words.concat(list.phrases).map(studyCard).join("")}</section><section class="panel"><div class="section-title"><h3>\u53e5\u578b\u9ed8\u5199</h3><span>\u4e2d\u6587 \u2192 \u82f1\u6587</span></div>${sentenceDictation()}</section><section class="panel"><div class="section-title"><h3>\u5199\u4f5c\u7ec3\u4e60</h3><span>\u8054\u5408\u4eca\u65e5\u8bcd\u53e5</span></div>${writingPrompt(list)}</section><section class="panel"><div class="section-title"><h3>\u77ed\u6587\u7cbe\u8bfb</h3><span>\u7ffb\u8bd1 + \u91cd\u70b9</span></div>${passageCard()}</section><section class="panel"><div class="section-title"><h3>\u9898\u76ee\u7ec3\u4e60</h3><span>${list.questions.length} \u9898</span></div>${list.questions.map(questionCard).join("")}</section>`);
+    const list = todayList(), state = load();
+    const steps = practiceSteps(list, state);
+    const active = Math.min(state.practiceStep[todayKey()] || 0, steps.length - 1);
+    const step = steps[active];
+    const done = steps.filter((x) => state.done[`${todayKey()}:${x.id}`]).length;
+    shell(`<section class="panel step-shell"><div class="section-title"><h3>\u4eca\u65e5\u8f7b\u677e\u8fc7\u5173</h3><span>${done}/${steps.length}</span></div><div class="step-tabs">${steps.map((x, i) => `<button class="${i === active ? "active" : ""} ${state.done[`${todayKey()}:${x.id}`] ? "done" : ""}" data-jump-step="${i}">${i + 1}</button>`).join("")}</div><p class="hint">${state.done[`${todayKey()}:${step.id}`] ? "\u2705 \u5df2\u5b8c\u6210\uff0c\u53ef\u4ee5\u8fdb\u5165\u4e0b\u4e00\u6b65\u3002" : "\u6bcf\u6b21\u53ea\u505a\u4e00\u6b65\uff0c\u505a\u5b8c\u518d\u70b9\u4e0b\u4e00\u6b65\u3002"}</p></section><section class="panel"><div class="section-title"><h3>Step ${active + 1}\uff1a${step.title}</h3><span>${step.meta}</span></div>${step.html}<button class="primary" data-finish-step="${step.id}">${state.done[`${todayKey()}:${step.id}`] ? "\u4e0b\u4e00\u6b65" : "\u2705 \u5b8c\u6210\u672c\u6b65"}</button></section>`);
     bindPractice();
+    document.querySelectorAll("[data-finish-step]").forEach((b) => b.addEventListener("click", () => finishPracticeStep(b.dataset.finishStep, steps.length)));
+    document.querySelectorAll("[data-jump-step]").forEach((b) => b.addEventListener("click", () => { const s = load(); s.practiceStep[todayKey()] = Number(b.dataset.jumpStep); save(s); renderPractice(); }));
+  }
+  function practiceSteps(list, state) {
+    const due = state.review.filter((x) => x.due <= todayKey()).slice(0, 5);
+    return [
+      { id: "words", title: "\u5355\u8bcd\u77ed\u8bed", meta: `${list.words.length}+${list.phrases.length}`, html: list.words.concat(list.phrases).map(studyCard).join("") },
+      { id: "dictation", title: "\u53e5\u578b\u9ed8\u5199", meta: "\u5199 1 \u53e5", html: sentenceDictation() },
+      { id: "questions", title: "\u9605\u8bfb\u8bad\u7ec3", meta: `\u4eca\u65e5\u9605\u8bfb\uff1a${list.questions.length} \u9898`, html: `<details><summary>\u5c55\u5f00\u4eca\u65e5\u9605\u8bfb ${list.questions.length} \u9898</summary>${list.questions.map(questionCard).join("")}</details>` },
+      { id: "writing", title: "\u5199\u4f5c\u7ec3\u4e60", meta: "\u5148\u5199 1 \u53e5", html: writingPrompt(list) },
+      { id: "review", title: "\u590d\u4e60\u56de\u6536", meta: `${due.length} \u9879`, html: due.length ? due.map(reviewMiniCard).join("") : `<p class="empty">\u4eca\u5929\u6682\u65e0\u5230\u671f\u590d\u4e60\uff0c\u53ef\u4ee5\u8f7b\u677e\u6536\u5c3e\u3002</p>` }
+    ];
+  }
+  function finishPracticeStep(id, total) {
+    const s = load();
+    s.done[`${todayKey()}:${id}`] = true;
+    const current = s.practiceStep[todayKey()] || 0;
+    s.practiceStep[todayKey()] = Math.min(current + 1, total - 1);
+    save(s);
+    renderPractice();
+  }
+  function reviewMiniCard(x) {
+    return `<article class="study-card compact"><p class="eyebrow">${x.kind}</p><h3>${x.text}</h3><p>${x.cn}</p></article>`;
   }
   function studyCard(item) {
     return `<article class="study-card"><p class="eyebrow">${item.tip}</p><h3>${item.text}</h3><p class="word-meta">${item.phonetic ? item.phonetic + " · " : ""}${item.pos}</p><p>${item.cn}</p>${recallBox(item)}<div class="mastery-row"><button data-mastery="${item.id}" data-level="1" data-text="${esc(item.text)}" data-cn="${esc(item.cn)}" data-kind="${item.type}">\u4e0d\u719f</button><button data-mastery="${item.id}" data-level="2" data-text="${esc(item.text)}" data-cn="${esc(item.cn)}" data-kind="${item.type}">\u6a21\u7cca</button><button data-mastery="${item.id}" data-level="3" data-text="${esc(item.text)}" data-cn="${esc(item.cn)}" data-kind="${item.type}">\u8bb0\u4f4f</button></div><button class="tiny" data-add-review="${item.id}" data-text="${esc(item.text)}" data-cn="${esc(item.cn)}" data-kind="${item.type}">\u52a0\u5165\u590d\u4e60</button></article>`;
@@ -196,7 +229,8 @@
   function writingPrompt(list) {
     const required = list.words.slice(0, 3).map((w) => w.text).concat(list.phrases.slice(0, 2).map((p) => p.text));
     const sentence = writing[0].text;
-    return `<article class="study-card"><p><strong>\u9898\u76ee\uff1a</strong>\u8bf7\u5199 3-5 \u53e5\u82f1\u6587\uff0c\u4e3b\u9898\u662f\u201cHow to build a good habit\u201d\u3002</p><p><strong>\u5c3d\u91cf\u4f7f\u7528\uff1a</strong>${required.join(", ")}</p><p><strong>\u53ef\u7528\u53e5\u578b\uff1a</strong>${sentence}</p><textarea class="writing-input" id="writing-answer" placeholder="\u5728\u8fd9\u91cc\u5199\u82f1\u6587\u77ed\u6587"></textarea><button class="primary" id="grade-writing">\u6821\u9a8c\u5e76\u4f30\u5206</button><div class="explanation" id="writing-result" hidden></div></article>`;
+    const prompt = `请帮我分析这段英语二作文练习：\\n主题：How to build a good habit\\n要求：指出语法错误、连接词、句型单一问题，并给一个更适合自考英语二的改写版本。\\n我的作文：`;
+    return `<article class="study-card"><p><strong>\u5148\u5199 1 \u53e5\uff1a</strong>\u7528 today words \u5199 1 \u4e2a\u82f1\u6587\u53e5\u5b50\u3002</p><p><strong>\u5c3d\u91cf\u4f7f\u7528\uff1a</strong>${required.join(", ")}</p><p><strong>\u53ef\u7528\u53e5\u578b\uff1a</strong>${sentence}</p><textarea class="writing-input" id="writing-answer" placeholder="\u5148\u5199 1 \u53e5\u5c31\u591f\uff0c\u4f8b\u5982\uff1aIt is important for us to build a good habit."></textarea><button class="primary" id="grade-writing">\u68c0\u67e5\u8fd9 1 \u53e5</button><details><summary>\u60f3\u591a\u7ec3\uff1f\u5199\u4e00\u5c0f\u6bb5</summary><p class="hint">\u53ef\u4ee5\u518d\u52a0 2-3 \u53e5\uff0c\u4e0d\u8981\u4e00\u5f00\u59cb\u5c31\u7ed9\u81ea\u5df1\u592a\u5927\u538b\u529b\u3002</p></details><div class="button-row"><button class="tiny" data-copy-writing>\u590d\u5236\u6211\u7684\u4f5c\u6587</button><button class="tiny" data-copy-prompt="${esc(prompt)}">\u590d\u5236 AI \u5206\u6790 Prompt</button></div><div class="explanation" id="writing-result" hidden></div></article>`;
   }
   function sentenceDictation() {
     const s = writing[Number(todayKey().slice(-2)) % writing.length];
@@ -213,6 +247,8 @@
     document.querySelectorAll("[data-mastery]").forEach((b) => b.addEventListener("click", () => markMastery(b)));
     document.querySelectorAll("[data-check-recall]").forEach((b) => b.addEventListener("click", () => checkRecall(b)));
     document.querySelectorAll("[data-submit-question]").forEach((b) => b.addEventListener("click", () => submitQuestion(b.dataset.submitQuestion)));
+    document.querySelectorAll("[data-copy-writing]").forEach((b) => b.addEventListener("click", () => copyText(document.querySelector("#writing-answer")?.value || "", b)));
+    document.querySelectorAll("[data-copy-prompt]").forEach((b) => b.addEventListener("click", () => copyText(`${b.dataset.copyPrompt}\n${document.querySelector("#writing-answer")?.value || ""}`, b)));
     const dictation = document.querySelector("#check-dictation"); if (dictation) dictation.addEventListener("click", () => checkDictation(dictation));
     const grade = document.querySelector("#grade-writing"); if (grade) grade.addEventListener("click", gradeWriting);
   }
@@ -241,6 +277,11 @@
     box.hidden = false;
     box.innerHTML = `<div class="result ${score >= 70 ? "ok" : "bad"}">\u53e5\u578b\u5339\u914d\u5ea6 ${score}%</div><p>\u6807\u51c6\u53e5\uff1a${answer}</p><p>${score >= 70 ? "\u5173\u952e\u8bcd\u57fa\u672c\u5230\u4f4d\uff0c\u660e\u5929\u518d\u9ed8\u5199\u4e00\u904d\u52a0\u56fa\u3002" : "\u5148\u628a\u4e3b\u5e72\u5199\u5bf9\uff0c\u518d\u8865\u4ecb\u8bcd\u548c\u526f\u8bcd\u3002"}</p>`;
     const s = load(); s.recall[`dictation-${todayKey()}`] = { ok: score >= 70, input, answer, at: new Date().toISOString() }; save(s);
+  }
+  function copyText(text, btn) {
+    const done = () => { btn.textContent = "\u5df2\u590d\u5236"; };
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done).catch(done);
+    else done();
   }
   function checkRecall(btn) {
     const input = document.querySelector(`[data-recall-input="${btn.dataset.checkRecall}"]`);
@@ -293,7 +334,7 @@
     const ai = writingCoach(text, required);
     const box = document.querySelector("#writing-result");
     box.hidden = false;
-    box.innerHTML = `<div class="result ${score >= 9 ? "ok" : "bad"}">\u9884\u4f30 ${score}/15 \u5206</div>${why.map((x) => `<p>${x}</p>`).join("")}<h4>AI\u70b9\u8bc4</h4>${ai.comments.map((x) => `<p>${x}</p>`).join("")}<h4>AI\u6539\u5199</h4><p class="english">${ai.rewrite}</p><h4>\u9ad8\u7ea7\u8868\u8fbe\u66ff\u6362</h4><div class="tag-group">${ai.replacements.map((x) => `<button>${x}</button>`).join("")}</div><p>\u8bf4\u660e\uff1a\u8fd9\u662f\u672c\u5730\u7ec3\u4e60\u7528\u8bca\u65ad\uff0c\u4e0d\u4ee3\u8868\u771f\u5b9e\u9605\u5377\u5206\u3002</p>`;
+    box.innerHTML = `<div class="result ${score >= 7 ? "ok" : "bad"}">\u5df2\u5b8c\u6210\uff1a\u5148\u628a\u8fd9 1 \u53e5\u5199\u51fa\u6765\u5c31\u5f88\u597d</div>${why.map((x) => `<p>${x}</p>`).join("")}<h4>\u672c\u5730\u5c0f\u63d0\u9192</h4>${ai.comments.slice(0, 2).map((x) => `<p>${x}</p>`).join("")}<h4>\u53ef\u53c2\u8003\u6539\u5199</h4><p class="english">${ai.rewrite}</p><h4>\u5e38\u7528\u66ff\u6362</h4><div class="tag-group">${ai.replacements.map((x) => `<button>${x}</button>`).join("")}</div><p>\u60f3\u8981\u66f4\u8be6\u7ec6\u5206\u6790\uff0c\u70b9\u201c\u590d\u5236 AI \u5206\u6790 Prompt\u201d\u53bb\u514d\u8d39 AI \u91cc\u7c98\u8d34\u3002</p>`;
     const s = load(); s.writingScores.push({ text, score, why, at: new Date().toISOString() }); save(s);
   }
   function writingCoach(text, required) {
@@ -398,7 +439,8 @@
     const s = load(), correct = s.attempts.filter((x) => x.correct).length, acc = s.attempts.length ? Math.round(correct / s.attempts.length * 100) : 0, recallOk = Object.values(s.recall).filter((x) => x.ok).length;
     const writingAvg = s.writingScores.length ? avg(s.writingScores.map((x) => x.score)).toFixed(1) : "-";
     const pred = passPrediction(s), diagnosis = weeklyDiagnosis(s, pred);
-    shell(`<section class="hero-band"><div><p class="eyebrow">\u5b66\u4e60\u8fdb\u5ea6</p><h2>\u8fc7\u7ebf\u95ed\u73af\u770b\u677f</h2><p>\u770b\u8d8b\u52bf\u3001\u9519\u56e0\u548c\u672c\u5468\u8bca\u65ad\uff0c\u4e0d\u7528\u81ea\u5df1\u731c\u95ee\u9898\u5728\u54ea\u3002</p></div><div class="score-ring">${acc}%</div></section><section class="summary-grid"><div><strong>${acc}%</strong><span>\u9605\u8bfb\u6b63\u786e\u7387</span></div><div><strong>${recallOk}</strong><span>\u5355\u8bcd\u8bb0\u5fc6</span></div><div><strong>${writingAvg}</strong><span>\u5199\u4f5c\u5e73\u5747\u5206</span></div></section><section class="panel"><div class="section-title"><h3>\u6700\u8fd1 7 \u5929</h3><span>\u5b66\u4e60\u70ed\u529b</span></div><div class="heatmap">${lastNDays(7).map((d) => `<span class="${Object.keys(s.done).some((k) => k.startsWith(d)) ? "hot" : ""}">${d.slice(5)}</span>`).join("")}</div></section><section class="panel"><div class="section-title"><h3>AI \u5b66\u4e60\u8bca\u65ad</h3><span>\u6bcf\u5468\u770b\u4e00\u6b21</span></div>${diagnosis.map((x) => `<p>${x}</p>`).join("")}</section>`);
+    const streak = streakStats(s);
+    shell(`<section class="hero-band"><div><p class="eyebrow">\u5b66\u4e60\u8fdb\u5ea6</p><h2>\u8fc7\u7ebf\u95ed\u73af\u770b\u677f</h2><p>\u8fd9\u91cc\u653e\u8be6\u7ec6\u7edf\u8ba1\uff0c\u9996\u9875\u53ea\u4fdd\u7559\u8f7b\u91cf\u4efb\u52a1\u3002</p></div><div class="score-ring">${acc}%</div></section><section class="summary-grid"><div><strong>${pred.probability}%</strong><span>\u8fc7\u7ebf\u6982\u7387</span></div><div><strong>${streak.weekRate}%</strong><span>\u672c\u5468\u5b8c\u6210\u7387</span></div><div><strong>${streak.monthMinutes}</strong><span>\u672c\u6708\u5206\u949f</span></div></section><section class="summary-grid"><div><strong>${acc}%</strong><span>\u9605\u8bfb\u6b63\u786e\u7387</span></div><div><strong>${recallOk}</strong><span>\u5355\u8bcd\u8bb0\u5fc6</span></div><div><strong>${writingAvg}</strong><span>\u5199\u4f5c\u5e73\u5747\u5206</span></div></section><section class="panel"><div class="section-title"><h3>\u8584\u5f31\u9879</h3><span>\u8be6\u7ec6\u7edf\u8ba1</span></div><div class="tag-group">${(pred.weaknesses.length ? pred.weaknesses : ["\u4fdd\u6301\u8282\u594f"]).map((x) => `<button>${x}</button>`).join("")}</div></section><section class="panel"><div class="section-title"><h3>\u6700\u8fd1 7 \u5929</h3><span>\u5b66\u4e60\u70ed\u529b</span></div><div class="heatmap">${lastNDays(7).map((d) => `<span class="${Object.keys(s.done).some((k) => k.startsWith(d)) ? "hot" : ""}">${d.slice(5)}</span>`).join("")}</div></section><section class="panel"><div class="section-title"><h3>\u5b66\u4e60\u8bca\u65ad</h3><span>\u6bcf\u5468\u770b\u4e00\u6b21</span></div>${diagnosis.map((x) => `<p>${x}</p>`).join("")}</section>`);
   }
   function weeklyDiagnosis(state, pred) {
     const lines = [];
