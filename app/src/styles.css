@@ -293,6 +293,28 @@ p {
   margin: 12px 0;
 }
 
+.mastery-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.mastery-row button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfaf6;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.mastery-row button.active {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
 .recall-box input {
   min-height: 44px;
   width: 100%;

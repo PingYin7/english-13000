@@ -77,13 +77,13 @@
   }
   function defaults() {
     return {
-      done: {}, attempts: [], wrong: [], recall: {}, writingScores: [], imported: [],
+      done: {}, attempts: [], wrong: [], recall: {}, mastery: {}, writingScores: [], imported: [],
       settings: { wordCount: 3, phraseCount: 2, questionCount: 2, writingCount: 1 },
       review: [reviewItem("benefit", "\u597d\u5904\uff1b\u4f7f\u53d7\u76ca", "word"), reviewItem("as a result", "\u7ed3\u679c\uff1b\u56e0\u6b64", "phrase")]
     };
   }
-  function reviewItem(text, cn, kind) {
-    return { id: `review-${kind}-${text.replace(/\s+/g, "-")}`, text, cn, kind, due: todayKey(), interval: 1, status: "\u6a21\u7cca" };
+  function reviewItem(text, cn, kind, extra = {}) {
+    return { id: extra.id || `review-${kind}-${text.replace(/\s+/g, "-")}`, text, cn, kind, due: extra.due || todayKey(), interval: extra.interval || 1, status: "\u6a21\u7cca", ...extra };
   }
   function load() {
     try { return merge(defaults(), JSON.parse(localStorage.getItem(stateKey) || "{}")); } catch { return defaults(); }
@@ -104,10 +104,13 @@
   }
   function renderToday() {
     const state = load(), s = state.settings;
+    const dueReview = state.review.filter((x) => x.due <= todayKey()).length;
+    const dueWrong = state.review.filter((x) => x.kind === "question" && x.due <= todayKey()).length;
     const base = [
-      ["review", "\u5148\u590d\u4e60", "\u590d\u4e60\u5230\u671f\u9519\u8bcd\u548c\u77ed\u8bed", "review"],
+      ["review", "\u5148\u590d\u4e60", `\u4eca\u5929\u5230\u671f ${dueReview} \u9879\uff0c\u5176\u4e2d\u9519\u9898 ${dueWrong} \u9898`, "review"],
       ["words", "\u5355\u8bcd\u77ed\u8bed", `\u4eca\u5929 ${s.wordCount} \u4e2a\u5355\u8bcd\u3001${s.phraseCount} \u4e2a\u77ed\u8bed`, "practice"],
       ["questions", "\u9605\u8bfb\u9898", `\u4eca\u5929 ${s.questionCount} \u9053\u9605\u8bfb\u9898`, "practice"],
+      ["dictation", "\u53e5\u578b\u9ed8\u5199", "\u770b\u4e2d\u6587\u9ed8\u5199\u82f1\u6587\uff0c\u7cfb\u7edf\u68c0\u67e5\u5173\u952e\u8bcd", "practice"],
       ["writing", "\u5199\u4f5c\u9898", "\u7528\u4eca\u5929\u7684\u8bcd\u548c\u53e5\u578b\u5199\u4e00\u6bb5", "practice"]
     ];
     const allDone = base.every(([id]) => state.done[`${todayKey()}:${id}`]);
@@ -122,11 +125,11 @@
   }
   function renderPractice() {
     const list = todayList();
-    shell(`<section class="panel"><div class="section-title"><h3>\u4eca\u65e5\u5355\u8bcd\u77ed\u8bed</h3><span>${list.words.length}+${list.phrases.length}</span></div>${list.words.concat(list.phrases).map(studyCard).join("")}</section><section class="panel"><div class="section-title"><h3>\u5199\u4f5c\u7ec3\u4e60</h3><span>\u8054\u5408\u4eca\u65e5\u8bcd\u53e5</span></div>${writingPrompt(list)}</section><section class="panel"><div class="section-title"><h3>\u77ed\u6587\u7cbe\u8bfb</h3><span>\u7ffb\u8bd1 + \u91cd\u70b9</span></div>${passageCard()}</section><section class="panel"><div class="section-title"><h3>\u9898\u76ee\u7ec3\u4e60</h3><span>${list.questions.length} \u9898</span></div>${list.questions.map(questionCard).join("")}</section>`);
+    shell(`<section class="panel"><div class="section-title"><h3>\u4eca\u65e5\u5355\u8bcd\u77ed\u8bed</h3><span>${list.words.length}+${list.phrases.length}</span></div>${list.words.concat(list.phrases).map(studyCard).join("")}</section><section class="panel"><div class="section-title"><h3>\u53e5\u578b\u9ed8\u5199</h3><span>\u4e2d\u6587 \u2192 \u82f1\u6587</span></div>${sentenceDictation()}</section><section class="panel"><div class="section-title"><h3>\u5199\u4f5c\u7ec3\u4e60</h3><span>\u8054\u5408\u4eca\u65e5\u8bcd\u53e5</span></div>${writingPrompt(list)}</section><section class="panel"><div class="section-title"><h3>\u77ed\u6587\u7cbe\u8bfb</h3><span>\u7ffb\u8bd1 + \u91cd\u70b9</span></div>${passageCard()}</section><section class="panel"><div class="section-title"><h3>\u9898\u76ee\u7ec3\u4e60</h3><span>${list.questions.length} \u9898</span></div>${list.questions.map(questionCard).join("")}</section>`);
     bindPractice();
   }
   function studyCard(item) {
-    return `<article class="study-card"><p class="eyebrow">${item.tip}</p><h3>${item.text}</h3><p class="word-meta">${item.phonetic ? item.phonetic + " · " : ""}${item.pos}</p><p>${item.cn}</p>${recallBox(item)}<button class="tiny" data-add-review="${item.id}" data-text="${esc(item.text)}" data-cn="${esc(item.cn)}" data-kind="${item.type}">\u52a0\u5165\u590d\u4e60</button></article>`;
+    return `<article class="study-card"><p class="eyebrow">${item.tip}</p><h3>${item.text}</h3><p class="word-meta">${item.phonetic ? item.phonetic + " · " : ""}${item.pos}</p><p>${item.cn}</p>${recallBox(item)}<div class="mastery-row"><button data-mastery="${item.id}" data-level="1" data-text="${esc(item.text)}" data-cn="${esc(item.cn)}" data-kind="${item.type}">\u4e0d\u719f</button><button data-mastery="${item.id}" data-level="2" data-text="${esc(item.text)}" data-cn="${esc(item.cn)}" data-kind="${item.type}">\u6a21\u7cca</button><button data-mastery="${item.id}" data-level="3" data-text="${esc(item.text)}" data-cn="${esc(item.cn)}" data-kind="${item.type}">\u8bb0\u4f4f</button></div><button class="tiny" data-add-review="${item.id}" data-text="${esc(item.text)}" data-cn="${esc(item.cn)}" data-kind="${item.type}">\u52a0\u5165\u590d\u4e60</button></article>`;
   }
   function recallBox(item) {
     return `<div class="recall-box"><input data-recall-input="${item.id}" placeholder="\u8f93\u5165\u82f1\u6587\u6216\u4e2d\u6587\u610f\u601d" /><button class="tiny" data-check-recall="${item.id}" data-answer="${esc(item.text)}" data-cn="${esc(item.cn)}">\u9a8c\u8bc1\u8bb0\u4f4f</button><p class="recall-result" id="recall-${item.id}"></p></div>`;
@@ -136,6 +139,10 @@
     const sentence = writing[0].text;
     return `<article class="study-card"><p><strong>\u9898\u76ee\uff1a</strong>\u8bf7\u5199 3-5 \u53e5\u82f1\u6587\uff0c\u4e3b\u9898\u662f\u201cHow to build a good habit\u201d\u3002</p><p><strong>\u5c3d\u91cf\u4f7f\u7528\uff1a</strong>${required.join(", ")}</p><p><strong>\u53ef\u7528\u53e5\u578b\uff1a</strong>${sentence}</p><textarea class="writing-input" id="writing-answer" placeholder="\u5728\u8fd9\u91cc\u5199\u82f1\u6587\u77ed\u6587"></textarea><button class="primary" id="grade-writing">\u6821\u9a8c\u5e76\u4f30\u5206</button><div class="explanation" id="writing-result" hidden></div></article>`;
   }
+  function sentenceDictation() {
+    const s = writing[Number(todayKey().slice(-2)) % writing.length];
+    return `<article class="study-card"><p><strong>\u770b\u4e2d\u6587\u9ed8\u5199\uff1a</strong>${s.cn}</p><textarea class="writing-input dictation-input" id="dictation-answer" placeholder="\u4e0d\u770b\u82f1\u6587\uff0c\u5148\u81ea\u5df1\u5199\u4e00\u904d"></textarea><button class="primary" id="check-dictation" data-answer="${esc(s.text)}">\u68c0\u67e5\u53e5\u578b</button><div class="explanation" id="dictation-result" hidden></div></article>`;
+  }
   function passageCard() {
     return `<article class="passage-card"><h3>${passage.title}</h3><p class="english">${passage.text}</p>${passage.parts.map(([en, cn, tip]) => `<details><summary>${en}</summary><p>${cn}</p><p class="hint">${tip}</p></details>`).join("")}</article>`;
   }
@@ -144,9 +151,37 @@
   }
   function bindPractice() {
     document.querySelectorAll("[data-add-review]").forEach((b) => b.addEventListener("click", () => { const s = load(); const item = reviewItem(b.dataset.text, b.dataset.cn, b.dataset.kind); if (!s.review.some((r) => r.id === item.id)) s.review.push(item); save(s); b.textContent = "\u5df2\u52a0\u5165"; }));
+    document.querySelectorAll("[data-mastery]").forEach((b) => b.addEventListener("click", () => markMastery(b)));
     document.querySelectorAll("[data-check-recall]").forEach((b) => b.addEventListener("click", () => checkRecall(b)));
     document.querySelectorAll("[data-submit-question]").forEach((b) => b.addEventListener("click", () => submitQuestion(b.dataset.submitQuestion)));
+    const dictation = document.querySelector("#check-dictation"); if (dictation) dictation.addEventListener("click", () => checkDictation(dictation));
     const grade = document.querySelector("#grade-writing"); if (grade) grade.addEventListener("click", gradeWriting);
+  }
+  function markMastery(btn) {
+    const level = Number(btn.dataset.level);
+    const s = load();
+    const days = level === 3 ? 4 : level === 2 ? 2 : 1;
+    const due = addDays(days);
+    const item = reviewItem(btn.dataset.text, btn.dataset.cn, btn.dataset.kind, { due, interval: days });
+    const old = s.review.find((r) => r.id === item.id);
+    if (old) Object.assign(old, item); else s.review.push(item);
+    s.mastery[btn.dataset.mastery] = { level, due, at: new Date().toISOString() };
+    save(s);
+    btn.closest(".mastery-row").querySelectorAll("button").forEach((x) => x.classList.remove("active"));
+    btn.classList.add("active");
+  }
+  function checkDictation(btn) {
+    const input = document.querySelector("#dictation-answer").value.trim();
+    const answer = btn.dataset.answer;
+    const answerWords = answer.toLowerCase().match(/[a-z']+/g) || [];
+    const keyWords = answerWords.filter((w) => w.length > 2);
+    const hit = keyWords.filter((w) => norm(input).includes(norm(w))).length;
+    const close = norm(input) === norm(answer);
+    const score = close ? 100 : Math.round(hit / Math.max(keyWords.length, 1) * 100);
+    const box = document.querySelector("#dictation-result");
+    box.hidden = false;
+    box.innerHTML = `<div class="result ${score >= 70 ? "ok" : "bad"}">\u53e5\u578b\u5339\u914d\u5ea6 ${score}%</div><p>\u6807\u51c6\u53e5\uff1a${answer}</p><p>${score >= 70 ? "\u5173\u952e\u8bcd\u57fa\u672c\u5230\u4f4d\uff0c\u660e\u5929\u518d\u9ed8\u5199\u4e00\u904d\u52a0\u56fa\u3002" : "\u5148\u628a\u4e3b\u5e72\u5199\u5bf9\uff0c\u518d\u8865\u4ecb\u8bcd\u548c\u526f\u8bcd\u3002"}</p>`;
+    const s = load(); s.recall[`dictation-${todayKey()}`] = { ok: score >= 70, input, answer, at: new Date().toISOString() }; save(s);
   }
   function checkRecall(btn) {
     const input = document.querySelector(`[data-recall-input="${btn.dataset.checkRecall}"]`);
@@ -165,11 +200,19 @@
     if (!selected) return;
     const correct = selected.value === item.answer, s = load();
     s.attempts.push({ id, selected: selected.value, correct, at: new Date().toISOString() });
-    if (!correct && !s.wrong.includes(id)) s.wrong.push(id);
+    if (!correct) {
+      if (!s.wrong.includes(id)) s.wrong.push(id);
+      scheduleWrongQuestion(s, item);
+    }
     save(s);
     const box = document.querySelector(`#explain-${id}`);
     box.hidden = false;
     box.innerHTML = `<div class="result ${correct ? "ok" : "bad"}">${correct ? "\u7b54\u5bf9\u4e86" : `\u4f60\u9009\u4e86 ${selected.value}\uff0c\u6b63\u786e\u7b54\u6848\u662f ${item.answer}`}</div><h4>\u4e3a\u4ec0\u4e48\u9009 ${item.answer}</h4><p>${item.explain.why}</p><h4>\u539f\u6587\u5b9a\u4f4d</h4><blockquote>${item.explain.source}</blockquote><p>${item.explain.sourceCn}</p>`;
+  }
+  function scheduleWrongQuestion(state, item) {
+    const review = reviewItem(item.prompt, item.explain.why, "question", { id: `review-question-${item.id}`, qid: item.id, due: addDays(1), interval: 1 });
+    const old = state.review.find((x) => x.id === review.id);
+    if (old) Object.assign(old, review); else state.review.push(review);
   }
   function gradeWriting() {
     const text = document.querySelector("#writing-answer").value.trim(), list = todayList();
@@ -187,8 +230,13 @@
   }
   function renderReview() {
     const s = load(), items = s.review.filter((x) => x.due <= todayKey());
-    shell(`<section class="panel"><div class="section-title"><h3>\u590d\u4e60\u961f\u5217</h3><span>${items.length} \u9879\u5230\u671f</span></div>${(items.length ? items : s.review).map((x) => `<article class="review-row"><div><p class="eyebrow">${x.kind}</p><h3>${x.text}</h3><p>${x.cn}</p><small>\u4e0b\u6b21\uff1a${x.due}</small></div><div class="rating-row"><button data-rate="${x.id}" data-rating="1">\u4e0d\u4f1a</button><button data-rate="${x.id}" data-rating="2">\u6a21\u7cca</button><button data-rate="${x.id}" data-rating="3">\u8ba4\u8bc6</button></div></article>`).join("")}</section>`);
+    shell(`<section class="panel"><div class="section-title"><h3>\u590d\u4e60\u961f\u5217</h3><span>${items.length} \u9879\u5230\u671f</span></div>${(items.length ? items : s.review).map(reviewCard).join("")}</section>`);
     document.querySelectorAll("[data-rate]").forEach((b) => b.addEventListener("click", () => rate(b.dataset.rate, Number(b.dataset.rating))));
+  }
+  function reviewCard(x) {
+    const kind = x.kind === "question" ? "\u9519\u9898\u4e8c\u5237" : x.kind;
+    const action = x.kind === "question" ? `<button data-route="practice">\u56de\u7ec3\u4e60</button>` : "";
+    return `<article class="review-row"><div><p class="eyebrow">${kind}</p><h3>${x.text}</h3><p>${x.cn}</p><small>\u4e0b\u6b21\uff1a${x.due}</small></div><div class="rating-row">${action}<button data-rate="${x.id}" data-rating="1">\u4e0d\u4f1a</button><button data-rate="${x.id}" data-rating="2">\u6a21\u7cca</button><button data-rate="${x.id}" data-rating="3">\u8ba4\u8bc6</button></div></article>`;
   }
   function rate(id, level) {
     const s = load(), item = s.review.find((x) => x.id === id), days = level === 3 ? Math.max(item.interval * 2, 3) : level === 2 ? 2 : 1, d = new Date();
@@ -326,6 +374,11 @@
   function norm(text) { return String(text || "").toLowerCase().replace(/[\s,.!?;，。！？；]/g, ""); }
   function esc(text) { return String(text).replace(/"/g, "&quot;"); }
   function escapeHtml(text) { return String(text).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+  function addDays(days) {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  }
   function render() {
     const r = route();
     if (r === "practice") return renderPractice();
